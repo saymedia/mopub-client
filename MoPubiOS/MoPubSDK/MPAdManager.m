@@ -496,7 +496,7 @@ NSString * const kAdTypeMraid = @"mraid";
 	
 	_previousAdapter = _currentAdapter;
 	_currentAdapter = newAdapter;
-	[_currentAdapter retain];
+  [_currentAdapter retain];
 }
 
 #pragma mark -
@@ -643,7 +643,7 @@ NSString * const kAdTypeMraid = @"mraid";
 	{
 		MPBaseAdapter *newAdapter = [(MPBaseAdapter *)[[cls alloc] initWithAdapterDelegate:self] autorelease];
 		[self replaceCurrentAdapterWithAdapter:newAdapter];
-		[newAdapter release];
+		
 		[connection cancel];
 		
 		// Tell adapter to fire off ad request.
@@ -730,7 +730,6 @@ NSString * const kAdTypeMraid = @"mraid";
                         _data, @"payload",
                         nil];
 	[adapter getAdWithParams:params];
-	[adapter release];
 }
 
 - (void)logResponseBodyToConsole:(NSData *)data
