@@ -49,7 +49,9 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
 
 - (id)initWithURL:(NSURL *)URL delegate:(id<MPAdBrowserControllerDelegate>)delegate
 {
-	if (self = [super initWithNibName:@"MPAdBrowserController" bundle:nil])
+    NSString *smBundlePath = [[NSBundle mainBundle] pathForResource:@"SMAdKit.framework" ofType:nil];
+    NSBundle *smBundle = [NSBundle bundleWithPath:smBundlePath];
+	if (self = [super initWithNibName:@"MPAdBrowserController" bundle:smBundle])
 	{
 		_delegate = delegate;
 		_URL = [URL copy];
