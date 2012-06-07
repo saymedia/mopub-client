@@ -39,6 +39,9 @@
     NSInteger _originalTag;
     NSInteger _parentTag;
     CGAffineTransform _originalTransform;
+    
+    // Whether or not status bar hidden before ad takeover.
+    BOOL _statusBarWasHidden;
 }
 
 @property (nonatomic, assign) MRAdView *view;

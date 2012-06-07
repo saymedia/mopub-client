@@ -143,6 +143,8 @@ static NSString *const kMovieWillExitNotification42 =
 - (void)rotateToOrientation:(UIInterfaceOrientation)newOrientation {
     [_view fireChangeEventForProperty:
      [MRScreenSizeProperty propertyWithSize:MPApplicationFrame().size]];
+//    [_view fireChangeEventForProperty:
+//     [MROrientationProperty propertyWithOrientation:[[UIDevice currentDevice] orientation]]];
     [self rotateExpandedWindowsToCurrentOrientation];
 }
 
@@ -190,6 +192,12 @@ static NSString *const kMovieWillExitNotification42 =
 }
 
 - (void)animateFromExpandedStateToDefaultState {
+    // Reveal the status bar if it is hidden.
+    if (!_statusBarWasHidden)
+    {
+        [[UIApplication sharedApplication] setStatusBarHidden:NO];
+    }
+    
     // Transition the current expanded frame to the window-translated frame.
     [UIView beginAnimations:kAnimationKeyCloseExpanded context:nil];
     [UIView setAnimationDuration:0.3];
@@ -339,8 +347,17 @@ shouldLockOrientation:(BOOL)shouldLockOrientation {
 }
 
 - (void)animateViewFromDefaultStateToExpandedState:(UIView *)view {
+    CGRect _expandedFrameWithStatusBarOffset = _expandedFrame;
+    _statusBarWasHidden = [[UIApplication sharedApplication] isStatusBarHidden];
+    if (!_statusBarWasHidden)
+    {
+        [[UIApplication sharedApplication] setStatusBarHidden:YES];
+        _expandedFrameWithStatusBarOffset.origin.y -= 20;
+        _expandedFrameWithStatusBarOffset.size.height += 20;
+    }
+    
     // Calculate the expanded ad's frame in window coordinates.
-    CGRect expandedFrameInWindow = [self convertRectToWindowForCurrentOrientation:_expandedFrame];
+    CGRect expandedFrameInWindow = [self convertRectToWindowForCurrentOrientation:_expandedFrameWithStatusBarOffset];
     
     // Begin animating to the expanded state.
     [UIView beginAnimations:kAnimationKeyExpand context:nil];
