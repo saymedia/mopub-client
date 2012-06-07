@@ -140,7 +140,8 @@
     INFO: 'info',
     READY: 'ready',
     STATECHANGE: 'stateChange',
-    VIEWABLECHANGE: 'viewableChange'
+    VIEWABLECHANGE: 'viewableChange',
+    ORIENTATIONCHANGE: 'orientationChange'
   };
   
   var PLACEMENT_TYPES = mraid.PLACEMENT_TYPES = {
@@ -297,6 +298,10 @@
         expandProperties['width'] = screenSize['width'];
         expandProperties['height'] = screenSize['height'];
       }
+    },
+ 
+    orientationChange: function(val) {
+      broadcastEvent('orientationChange', parseInt(val, 10));
     },
     
     expandProperties: function(val) {

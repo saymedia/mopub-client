@@ -107,3 +107,36 @@
 }
 
 @end
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+@implementation MROrientationProperty : MRProperty
+
+@synthesize  orientation = _orientation;
+
++ (MROrientationProperty *)propertyWithOrientation:(UIDeviceOrientation)orientation {
+    MROrientationProperty *property = [[[self alloc] init] autorelease];
+    property.orientation = orientation;
+    return property;
+}
+
+- (NSString *)description {
+    int angle = 0;
+    switch (_orientation) {
+        case UIDeviceOrientationLandscapeLeft:
+            angle = 270;
+            break;
+        case UIDeviceOrientationLandscapeRight:
+            angle = 90;
+            break;
+        case UIDeviceOrientationPortraitUpsideDown:
+            angle = 180;
+            break;
+        default:
+            angle = 0;
+            break;
+    }    
+    return [NSString stringWithFormat:@"orientationChange: '%d'", angle];  
+}
+
+@end
