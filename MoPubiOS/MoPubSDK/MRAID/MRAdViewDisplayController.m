@@ -181,6 +181,14 @@ static NSString *const kMovieWillExitNotification42 =
 #pragma mark - Close Helpers
 
 - (void)closeFromExpandedState {
+    // Reveal the status bar if it is hidden.
+    if (!_statusBarWasHidden)
+    {
+        [[UIApplication sharedApplication] setStatusBarHidden:NO];
+        
+        // This will reposition view due to hiding/revealing of status bar.
+        [[[MPKeyWindow() rootViewController] view] setNeedsLayout];
+    }
     _expansionContentView.usesCustomCloseButton = YES;
     
     // Calculate the frame of our original parent view in the window coordinate space.
@@ -191,13 +199,7 @@ static NSString *const kMovieWillExitNotification42 =
     [self animateFromExpandedStateToDefaultState];
 }
 
-- (void)animateFromExpandedStateToDefaultState {
-    // Reveal the status bar if it is hidden.
-    if (!_statusBarWasHidden)
-    {
-        [[UIApplication sharedApplication] setStatusBarHidden:NO];
-    }
-    
+- (void)animateFromExpandedStateToDefaultState {    
     // Transition the current expanded frame to the window-translated frame.
     [UIView beginAnimations:kAnimationKeyCloseExpanded context:nil];
     [UIView setAnimationDuration:0.3];
@@ -352,10 +354,8 @@ shouldLockOrientation:(BOOL)shouldLockOrientation {
     if (!_statusBarWasHidden)
     {
         [[UIApplication sharedApplication] setStatusBarHidden:YES];
-        _expandedFrameWithStatusBarOffset.origin.y -= 20;
-        _expandedFrameWithStatusBarOffset.size.height += 20;
+        _expandedFrameWithStatusBarOffset = MPApplicationFrame();
     }
-    
     // Calculate the expanded ad's frame in window coordinates.
     CGRect expandedFrameInWindow = [self convertRectToWindowForCurrentOrientation:_expandedFrameWithStatusBarOffset];
     
