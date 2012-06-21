@@ -51,6 +51,10 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
 {
     NSString *smBundlePath = [[NSBundle mainBundle] pathForResource:@"SMAdKit.framework" ofType:nil];
     NSBundle *smBundle = [NSBundle bundleWithPath:smBundlePath];
+    if (smBundle == nil)
+    {
+        smBundle = [NSBundle mainBundle];
+    }
 	if (self = [super initWithNibName:@"MPAdBrowserController" bundle:smBundle])
 	{
 		_delegate = delegate;

@@ -248,6 +248,11 @@ static NSString * const kMraidURLScheme = @"mraid";
 
     NSString *mraidBundlePath = [[NSBundle mainBundle] pathForResource:@"SMAdKit.framework/Resources/MRAID" ofType:@"bundle"];
     NSBundle *mraidBundle = [NSBundle bundleWithPath:mraidBundlePath];
+    if (mraidBundle == nil)
+    {
+        mraidBundlePath = [[NSBundle mainBundle] pathForResource:@"MRAID" ofType:@"bundle"];
+        mraidBundle = [NSBundle bundleWithPath:mraidBundlePath];
+    }
     NSString *mraidPath = [mraidBundle pathForResource:@"mraid" ofType:@"js"];
     NSURL *mraidUrl = [NSURL fileURLWithPath:mraidPath];
     
