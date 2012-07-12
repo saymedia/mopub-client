@@ -484,4 +484,6 @@
     hasSetCustomClose = true;
     bridge.executeNativeCall('usecustomclose', 'shouldUseCustomClose', shouldUseCustomClose);
   };
+
+  mraid.sayMedia = true;
 }());
