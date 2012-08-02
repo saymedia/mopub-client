@@ -135,16 +135,20 @@ static NSString *const kMovieWillExitNotification42 =
     NSArray *properties = [NSArray arrayWithObjects:
                            [MRScreenSizeProperty propertyWithSize:MPApplicationFrame().size],
                            [MRStateProperty propertyWithState:_currentState],
+                           // SAY: include orientation with our initial javascript state
+                           [MROrientationProperty propertyWithOrientation:[[UIApplication sharedApplication] statusBarOrientation]],
                            nil];
     
     [_view fireChangeEventsForProperties:properties];
 }
 
 - (void)rotateToOrientation:(UIInterfaceOrientation)newOrientation {
-    [_view fireChangeEventForProperty:
-     [MRScreenSizeProperty propertyWithSize:MPApplicationFrame().size]];
-//    [_view fireChangeEventForProperty:
-//     [MROrientationProperty propertyWithOrientation:[[UIDevice currentDevice] orientation]]];
+    NSArray *properties = [NSArray arrayWithObjects:
+                           [MRScreenSizeProperty propertyWithSize:MPApplicationFrame().size],
+                           // SAY: sync orientation update to mraid object
+                           [MROrientationProperty propertyWithOrientation:newOrientation],
+                           nil];
+    [_view fireChangeEventsForProperties:properties];
     [self rotateExpandedWindowsToCurrentOrientation];
 }
 
@@ -416,10 +420,20 @@ shouldLockOrientation:(BOOL)shouldLockOrientation {
 - (void)constrainViewBoundsToApplicationFrame {
     CGFloat height = _expandedFrame.size.height;
     CGFloat width = _expandedFrame.size.width;
-    
+    UIInterfaceOrientation orientation = MPInterfaceOrientation();
+
+    // SAY: force size of expanded ad frame to be full size of application frame
     CGRect applicationFrame = MPApplicationFrame();
-    if (height > CGRectGetHeight(applicationFrame)) height = CGRectGetHeight(applicationFrame);
-    if (width > CGRectGetWidth(applicationFrame)) width = CGRectGetWidth(applicationFrame);
+    if (UIInterfaceOrientationIsLandscape(orientation))
+    {
+        width = CGRectGetHeight(applicationFrame);
+        height = CGRectGetWidth(applicationFrame);
+    }
+    else
+    {
+        height = CGRectGetHeight(applicationFrame);
+        width = CGRectGetWidth(applicationFrame);
+    }
     
     _expansionContentView.bounds = CGRectMake(0, 0, width, height);
 }

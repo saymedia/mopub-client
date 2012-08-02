@@ -176,7 +176,9 @@
   var screenSize = { width: -1, height: -1 };
 
   var placementType = PLACEMENT_TYPES.UNKNOWN;
-  
+
+  var orientation = -1;
+
   //////////////////////////////////////////////////////////////////////////////////////////////////
   
   var EventListeners = function(event) {
@@ -301,7 +303,7 @@
     },
  
     orientationChange: function(val) {
-      broadcastEvent('orientationChange', parseInt(val, 10));
+      broadcastEvent('orientationChange', orientation = parseInt(val, 10));
     },
     
     expandProperties: function(val) {
@@ -440,8 +442,12 @@
   mraid.isViewable = function() {
     return isViewable;
   };
-  
-  mraid.open = function(URL) {
+
+  mraid.getOrientation = function() {
+    return orientation;
+  };
+
+   mraid.open = function(URL) {
     if (!URL) broadcastEvent(EVENTS.ERROR, 'URL is required.', 'open');
     else bridge.executeNativeCall('open', 'url', URL);
   };

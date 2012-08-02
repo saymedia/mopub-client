@@ -24,6 +24,9 @@
                               allowsExpansion:YES
                              closeButtonStyle:MRAdViewCloseButtonStyleAdControlled
                                 placementType:MRAdViewPlacementTypeInline];
+    // SAY: necessary to make adview automatically resize to bounds of parent
+    _adView.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+        UIViewAutoresizingFlexibleHeight;
     _adView.delegate = self;
     [_adView loadCreativeWithHTMLString:payloadString 
                                 baseURL:nil];
