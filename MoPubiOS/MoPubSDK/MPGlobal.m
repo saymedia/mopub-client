@@ -38,12 +38,7 @@ CGFloat MPStatusBarHeight() {
 
 CGRect MPApplicationFrame()
 {
-    CGRect frame = MPScreenBounds();
-    
-    frame.origin.y += MPStatusBarHeight();
-    frame.size.height -= MPStatusBarHeight();
-    
-    return frame;
+    return [[UIScreen mainScreen] bounds];
 }
 
 CGRect MPScreenBounds()

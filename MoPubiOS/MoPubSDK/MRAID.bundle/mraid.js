@@ -140,7 +140,8 @@
     INFO: 'info',
     READY: 'ready',
     STATECHANGE: 'stateChange',
-    VIEWABLECHANGE: 'viewableChange'
+    VIEWABLECHANGE: 'viewableChange',
+    ORIENTATIONCHANGE: 'orientationChange'
   };
   
   var PLACEMENT_TYPES = mraid.PLACEMENT_TYPES = {
@@ -175,7 +176,9 @@
   var screenSize = { width: -1, height: -1 };
 
   var placementType = PLACEMENT_TYPES.UNKNOWN;
-  
+
+  var orientation = -1;
+
   //////////////////////////////////////////////////////////////////////////////////////////////////
   
   var EventListeners = function(event) {
@@ -297,6 +300,10 @@
         expandProperties['width'] = screenSize['width'];
         expandProperties['height'] = screenSize['height'];
       }
+    },
+ 
+    orientationChange: function(val) {
+      broadcastEvent('orientationChange', orientation = parseInt(val, 10));
     },
     
     expandProperties: function(val) {
@@ -435,8 +442,12 @@
   mraid.isViewable = function() {
     return isViewable;
   };
-  
-  mraid.open = function(URL) {
+
+  mraid.getOrientation = function() {
+    return orientation;
+  };
+
+   mraid.open = function(URL) {
     if (!URL) broadcastEvent(EVENTS.ERROR, 'URL is required.', 'open');
     else bridge.executeNativeCall('open', 'url', URL);
   };
@@ -479,4 +490,6 @@
     hasSetCustomClose = true;
     bridge.executeNativeCall('usecustomclose', 'shouldUseCustomClose', shouldUseCustomClose);
   };
+
+  mraid.sayMedia = true;
 }());

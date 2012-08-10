@@ -143,7 +143,17 @@
     
 	MPLogDebug(@"Expanding to (%.1f, %.1f, %.1f, %.1f); displaying %@.", x, y, w, h, url);
     
-	CGRect newFrame = CGRectMake(x, y, w, h);
+    // SAY: for takeover, our ads always take the full screen
+    // this defines the initial takeover frame dimensions
+	CGRect newFrame;
+    if (UIInterfaceOrientationIsLandscape(MPInterfaceOrientation()))
+    {
+        newFrame = CGRectMake(0, 0, afHeight, afWidth);
+    }
+    else
+    {
+        newFrame = CGRectMake(0, 0, afWidth, afHeight); //(x, y, w, h);
+    }
     
     [self.view.displayController expandToFrame:newFrame 
                            withURL:url 

@@ -135,14 +135,20 @@ static NSString *const kMovieWillExitNotification42 =
     NSArray *properties = [NSArray arrayWithObjects:
                            [MRScreenSizeProperty propertyWithSize:MPApplicationFrame().size],
                            [MRStateProperty propertyWithState:_currentState],
+                           // SAY: include orientation with our initial javascript state
+                           [MROrientationProperty propertyWithOrientation:[[UIApplication sharedApplication] statusBarOrientation]],
                            nil];
     
     [_view fireChangeEventsForProperties:properties];
 }
 
 - (void)rotateToOrientation:(UIInterfaceOrientation)newOrientation {
-    [_view fireChangeEventForProperty:
-     [MRScreenSizeProperty propertyWithSize:MPApplicationFrame().size]];
+    NSArray *properties = [NSArray arrayWithObjects:
+                           [MRScreenSizeProperty propertyWithSize:MPApplicationFrame().size],
+                           // SAY: sync orientation update to mraid object
+                           [MROrientationProperty propertyWithOrientation:newOrientation],
+                           nil];
+    [_view fireChangeEventsForProperties:properties];
     [self rotateExpandedWindowsToCurrentOrientation];
 }
 
@@ -179,6 +185,14 @@ static NSString *const kMovieWillExitNotification42 =
 #pragma mark - Close Helpers
 
 - (void)closeFromExpandedState {
+    // Reveal the status bar if it is hidden.
+    if (!_statusBarWasHidden)
+    {
+        [[UIApplication sharedApplication] setStatusBarHidden:NO];
+        
+        // This will reposition view due to hiding/revealing of status bar.
+        [[[MPKeyWindow() rootViewController] view] setNeedsLayout];
+    }
     _expansionContentView.usesCustomCloseButton = YES;
     
     // Calculate the frame of our original parent view in the window coordinate space.
@@ -189,7 +203,7 @@ static NSString *const kMovieWillExitNotification42 =
     [self animateFromExpandedStateToDefaultState];
 }
 
-- (void)animateFromExpandedStateToDefaultState {
+- (void)animateFromExpandedStateToDefaultState {    
     // Transition the current expanded frame to the window-translated frame.
     [UIView beginAnimations:kAnimationKeyCloseExpanded context:nil];
     [UIView setAnimationDuration:0.3];
@@ -339,8 +353,15 @@ shouldLockOrientation:(BOOL)shouldLockOrientation {
 }
 
 - (void)animateViewFromDefaultStateToExpandedState:(UIView *)view {
+    CGRect _expandedFrameWithStatusBarOffset = _expandedFrame;
+    _statusBarWasHidden = [[UIApplication sharedApplication] isStatusBarHidden];
+    if (!_statusBarWasHidden)
+    {
+        [[UIApplication sharedApplication] setStatusBarHidden:YES];
+        _expandedFrameWithStatusBarOffset = MPApplicationFrame();
+    }
     // Calculate the expanded ad's frame in window coordinates.
-    CGRect expandedFrameInWindow = [self convertRectToWindowForCurrentOrientation:_expandedFrame];
+    CGRect expandedFrameInWindow = [self convertRectToWindowForCurrentOrientation:_expandedFrameWithStatusBarOffset];
     
     // Begin animating to the expanded state.
     [UIView beginAnimations:kAnimationKeyExpand context:nil];
@@ -399,10 +420,20 @@ shouldLockOrientation:(BOOL)shouldLockOrientation {
 - (void)constrainViewBoundsToApplicationFrame {
     CGFloat height = _expandedFrame.size.height;
     CGFloat width = _expandedFrame.size.width;
-    
+    UIInterfaceOrientation orientation = MPInterfaceOrientation();
+
+    // SAY: force size of expanded ad frame to be full size of application frame
     CGRect applicationFrame = MPApplicationFrame();
-    if (height > CGRectGetHeight(applicationFrame)) height = CGRectGetHeight(applicationFrame);
-    if (width > CGRectGetWidth(applicationFrame)) width = CGRectGetWidth(applicationFrame);
+    if (UIInterfaceOrientationIsLandscape(orientation))
+    {
+        width = CGRectGetHeight(applicationFrame);
+        height = CGRectGetWidth(applicationFrame);
+    }
+    else
+    {
+        height = CGRectGetHeight(applicationFrame);
+        width = CGRectGetWidth(applicationFrame);
+    }
     
     _expansionContentView.bounds = CGRectMake(0, 0, width, height);
 }
