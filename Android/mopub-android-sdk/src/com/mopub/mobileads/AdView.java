@@ -32,6 +32,18 @@
 
 package com.mopub.mobileads;
 
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
+import org.apache.http.Header;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.DefaultHttpClient;
+
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
@@ -57,18 +69,6 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
 import com.mopub.mobileads.MoPubView.LocationAwareness;
-import com.mopub.mobileads.Utils;
-
-import org.apache.http.Header;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.DefaultHttpClient;
-
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.text.SimpleDateFormat;
-import java.util.*;
 
 public class AdView extends WebView {
     public static final String AD_ORIENTATION_PORTRAIT_ONLY = "p";
@@ -84,6 +84,9 @@ public class AdView extends WebView {
     private static final int HTTP_CLIENT_TIMEOUT_MILLISECONDS = 10000;
     
     private String mAdUnitId;
+    // SAY
+    private String mAdIntegrationId;
+    //
     private String mKeywords;
     private String mUrl;
     private String mClickthroughUrl;
@@ -129,6 +132,7 @@ public class AdView extends WebView {
         setWebViewClient(new AdWebViewClient());
         
         addMoPubUriJavascriptInterface();
+ 
     }
     
     private void disableScrollingAndZoom() {
@@ -233,8 +237,22 @@ public class AdView extends WebView {
         }
     }
     
+    public String getAdIntegrationId() {
+		return mAdIntegrationId;
+	}
+	public void setAdIntegrationId(String id) {
+		mAdIntegrationId = id;
+	}
+	
+	public void loadUrlFromString(String url) {
+		mAdIntegrationId = url;
+    	//String url = smsdk.urlForAdId(adid);
+    	Log.i("SAY", "loadUrlFromString: Loading " + url);
+    	this.loadUrl(url);
+    }
+	
     public void loadAd() {
-        if (mAdUnitId == null) {
+        if (mAdUnitId == null && mAdIntegrationId == null) {
             Log.d("MoPub", "Can't load an ad in this ad view because the ad unit ID is null. " + 
                     "Did you forget to call setAdUnitId()?");
             return;
@@ -248,7 +266,8 @@ public class AdView extends WebView {
 
         if (mLocation == null) mLocation = getLastKnownLocation();
 
-        String adUrl = generateAdUrl();
+        //String adUrl = generateAdUrl();
+        String adUrl = getAdIntegrationId();
         mMoPubView.adWillLoad(adUrl);
         loadUrl(adUrl);
     }
@@ -444,7 +463,7 @@ public class AdView extends WebView {
             mWidth = 0;
             mHeight = 0;
         }
-
+/*
         // Set the auto-refresh time. A timer will be scheduled upon ad success or failure.
         Header rtHeader = response.getFirstHeader("X-Refreshtime");
         if (rtHeader != null) {
@@ -454,7 +473,7 @@ public class AdView extends WebView {
             }
         }
         else mRefreshTimeMilliseconds = 0;
-        
+  */      
         // Set the allowed orientations for this ad.
         Header orHeader = response.getFirstHeader("X-Orientation");
         mAdOrientation = (orHeader != null) ? orHeader.getValue() : null;
@@ -698,11 +717,13 @@ public class AdView extends WebView {
     }
 
     public String getAdUnitId() {
-        return mAdUnitId;
+        //return mAdUnitId;
+    	return mAdIntegrationId;
     }
 
     public void setAdUnitId(String adUnitId) {
-        mAdUnitId = adUnitId;
+        //mAdUnitId = adUnitId;
+    	mAdIntegrationId = adUnitId;
     }
 
     public void setTimeout(int milliseconds) {
@@ -748,7 +769,7 @@ public class AdView extends WebView {
     public void setAutorefreshEnabled(boolean enabled) {
         mAutorefreshEnabled = enabled;
         
-        Log.d("MoPub", "Automatic refresh for " + mAdUnitId + " set to: " + enabled + ".");
+        Log.d("MoPub", "Automatic refresh for " + getAdUnitId() + " set to: " + enabled + ".");
         
         if (!mAutorefreshEnabled) cancelRefreshTimer();
         else scheduleRefreshTimerIfEnabled();

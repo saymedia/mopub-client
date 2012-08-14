@@ -191,6 +191,18 @@ public class AdFetcher {
 
             mAdView.configureAdViewUsingHeadersFromHttpResponse(response);
 
+            // SAY MEDIA.
+            if ( true ) {
+            	// Handle mraid ad type.
+                Log.i("MoPub", "Loading mraid ad");
+                HashMap<String, String> paramsHash = new HashMap<String, String>();
+                paramsHash.put("X-Adtype", "mraid");
+
+                String data = httpEntityToString(entity);
+                paramsHash.put("X-Nativeparams", data);
+                return new LoadNativeAdTaskResult(mAdView, paramsHash);
+            } else {
+           
             // Ensure that the ad type header is valid and not "clear".
             Header atHeader = response.getFirstHeader("X-Adtype");
             if (atHeader == null || atHeader.getValue().equals("clear")) {
@@ -234,10 +246,11 @@ public class AdFetcher {
 
                 return new LoadNativeAdTaskResult(mAdView, paramsHash);
             }
-
+           
             // Handle HTML ad.
             String data = httpEntityToString(entity);
             return new LoadHtmlAdTaskResult(mAdView, data);
+            }
         }
         
         @Override
