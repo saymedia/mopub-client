@@ -14,8 +14,10 @@
 @property (nonatomic, retain) UIActionSheet *actionSheet;
 
 - (void)dismissActionSheet;
+- (BOOL)shouldLeaveApplicationForURL:(NSURL *)URL;
 - (void)leaveApplicationForURL:(NSURL *)URL;
 - (void)dismissBrowserAndOpenURL:(NSURL *)URL;
+- (void)dismissFromPresentingViewControllerAnimated:(BOOL)animated;
 
 @end
 
@@ -47,7 +49,9 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
 	// Hosts that should be handled by the OS.
 	SPECIAL_HOSTS = [[NSArray arrayWithObjects:
 					  @"phobos.apple.com",
+                      @"maps.apple.com",
 					  @"maps.google.com",
+                      @"itunes.apple.com",
 					  nil] retain];
 }
 
@@ -161,10 +165,16 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
 - (IBAction)done 
 {
 	[self dismissActionSheet];
-    [self.delegate dismissBrowserController:self];
+    
+    // Ensure that the browser controller gets dismissed even if its delegate is set to nil.
+    if (self.delegate) {
+        [self.delegate dismissBrowserController:self];
+    } else {
+        [self dismissFromPresentingViewControllerAnimated:YES];
+    }
 }
 
-- (IBAction)back 
+- (IBAction)back
 {
 	[self dismissActionSheet];
 	[_webView goBack];
@@ -193,9 +203,14 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
 											  cancelButtonTitle:@"Cancel" 
 										 destructiveButtonTitle:nil 
 											  otherButtonTitles:@"Open in Safari", nil] autorelease];
-		[self.actionSheet showFromBarButtonItem:self.safariButton animated:YES];
+		
+        if ([UIActionSheet instancesRespondToSelector:@selector(showFromBarButtonItem:animated:)]) {
+            [self.actionSheet showFromBarButtonItem:self.safariButton animated:YES];
+        } else {
+            [self.actionSheet showInView:self.webView];
+        }
 	}
-}	
+}
 
 - (void)dismissActionSheet
 {
@@ -207,7 +222,7 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
 #pragma mark UIActionSheetDelegate
 
 - (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex 
-{	
+{
 	if (buttonIndex == 0) 
 	{
 		// Open in Safari.
@@ -231,37 +246,17 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
 - (BOOL)webView:(UIWebView *)webView shouldStartLoadWithRequest:(NSURLRequest *)request 
  navigationType:(UIWebViewNavigationType)navigationType 
 {
-	MPLogDebug(@"Ad browser starting to load request %@", request.URL);
-	
-	/* 
-	 * For all links with http:// or https:// scheme, open in our browser UNLESS
-	 * the host is one of our special hosts that should be handled by the OS.
-	 */
-	if ([BROWSER_SCHEMES containsObject:request.URL.scheme])
-	{
-		if ([SPECIAL_HOSTS containsObject:request.URL.host])
-		{
-            [self leaveApplicationForURL:request.URL];
-			return NO;
-		}
-		else 
-		{
-			return YES;
-		}
-	}
-	// Non-http(s):// scheme, so ask the OS if it can handle.
-	else 
-	{
-		if ([[UIApplication sharedApplication] canOpenURL:request.URL])
-		{
-            [self leaveApplicationForURL:request.URL];
-			return NO;
-		}
-	}
-	return YES;
+	MPLogDebug(@"Ad browser (%p) starting to load URL: %@", self, request.URL);
+    
+    if ([self shouldLeaveApplicationForURL:request.URL]) {
+        [self leaveApplicationForURL:request.URL];
+        return NO;
+    } else {
+        return YES;
+    }
 }
 
-- (void)webViewDidStartLoad:(UIWebView *)webView 
+- (void)webViewDidStartLoad:(UIWebView *)webView
 {
 	_refreshButton.enabled = YES;
 	_safariButton.enabled = YES;
@@ -294,26 +289,52 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
 {
     _webViewLoadCount--;
     
-	MPLogError(@"Ad browser %@ experienced an error: %@.", self, [error localizedDescription]);
-	
     _refreshButton.enabled = YES;
-	_safariButton.enabled = YES;	
+	_safariButton.enabled = YES;
 	_backButton.enabled = _webView.canGoBack;
 	_forwardButton.enabled = _webView.canGoForward;
 	[_spinner stopAnimating];
+    
+    // Ignore NSURLErrorDomain error (-999).
+    if (error.code == NSURLErrorCancelled) return;
+    
+    // Ignore "Frame Load Interrupted" errors after navigating to iTunes or the App Store.
+    if (error.code == 102 && [error.domain isEqual:@"WebKitErrorDomain"]) return;
+    
+	MPLogError(@"Ad browser (%p) experienced an error: %@.", self, [error localizedDescription]);
 }
 
 #pragma mark - Internal
 
 #define kModalTransitionDelay 0.4
 
+- (BOOL)shouldLeaveApplicationForURL:(NSURL *)URL
+{
+    // Allow the OS to handle the following types of URLs:
+    // 1) URLs with a non-http(s) scheme satisfying -[UIApplication canOpenURL:].
+    if (![BROWSER_SCHEMES containsObject:URL.scheme]) {
+        return [[UIApplication sharedApplication] canOpenURL:URL];
+    }
+    
+    // 2) URLs with an http(s) scheme whose host is one of the pre-defined special hosts.
+    if ([SPECIAL_HOSTS containsObject:URL.host]) {
+        return YES;
+    }
+    
+    // 3) URLs with an http(s) scheme whose host has one of the special hosts as a suffix.
+    for (NSString *host in SPECIAL_HOSTS) {
+        if ([URL.host hasSuffix:host]) {
+            return YES;
+        }
+    }
+    
+    // All other URLs should be loaded directly in the in-app browser.
+    return NO;
+}
+
 - (void)leaveApplicationForURL:(NSURL *)URL
 {
     _hasLeftApplicationForCurrentURL = YES;
-    
-    if ([self.delegate respondsToSelector:@selector(browserControllerWillLeaveApplication:)]) {
-        [self.delegate browserControllerWillLeaveApplication:self];
-    }
     
     // XXX: It's possible that our browser may try to leave the application very shortly after
     // receiving a -webViewDidFinishLoad: callback (e.g. if a landing page uses window.location
@@ -325,14 +346,55 @@ static NSArray *BROWSER_SCHEMES, *SPECIAL_HOSTS;
         [self performSelector:@selector(dismissBrowserAndOpenURL:) withObject:URL
                    afterDelay:kModalTransitionDelay];
     } else {
-        [self dismissBrowserAndOpenURL:URL];
+        // The browser may not have been presented to the screen yet (i.e. it may still be loading
+        // in the background); if that's the case, don't call any dismissal methods.
+        BOOL isOnscreen = !!self.view.window;
+        if (isOnscreen) {
+            [self dismissBrowserAndOpenURL:URL];
+        } else {
+            if ([self.delegate respondsToSelector:@selector(browserControllerWillLeaveApplication:)]) {
+                [self.delegate browserControllerWillLeaveApplication:self];
+            }
+            [[UIApplication sharedApplication] openURL:URL];
+        }
     }
 }
 
 - (void)dismissBrowserAndOpenURL:(NSURL *)URL
 {
-    [self.delegate dismissBrowserController:self animated:NO];
+    if ([self.delegate respondsToSelector:@selector(browserControllerWillLeaveApplication:)]) {
+        [self.delegate browserControllerWillLeaveApplication:self];
+    }
+    
+    // Ensure that the browser controller gets dismissed even if its delegate is set to nil.
+    if (self.delegate) {
+        [self.delegate dismissBrowserController:self animated:NO]; 
+    } else {
+        [self dismissFromPresentingViewControllerAnimated:NO];
+    }
+    
     [[UIApplication sharedApplication] openURL:URL];
+}
+
+- (void)dismissFromPresentingViewControllerAnimated:(BOOL)animated
+{
+    UIViewController *presentingViewController;
+    
+    if ([self respondsToSelector:@selector(presentingViewController)]) {
+        // For iOS 5 and above.
+        presentingViewController = self.presentingViewController;
+    } else {
+        // Prior to iOS 5, the parentViewController property holds the presenting view controller.
+        presentingViewController = self.parentViewController;
+    }
+    
+#if NS_BLOCKS_AVAILABLE
+    if ([presentingViewController respondsToSelector:@selector(dismissViewControllerAnimated:completion:)]) {
+        [presentingViewController dismissViewControllerAnimated:animated completion:nil];
+        return;
+    }
+#endif
+    [presentingViewController dismissModalViewControllerAnimated:animated];
 }
 
 #pragma mark -

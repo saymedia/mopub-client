@@ -48,6 +48,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -69,6 +70,19 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
 import com.mopub.mobileads.MoPubView.LocationAwareness;
+import com.mopub.mobileads.Utils;
+
+import org.apache.http.Header;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.DefaultHttpClient;
+
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 public class AdView extends WebView {
     public static final String AD_ORIENTATION_PORTRAIT_ONLY = "p";
@@ -81,7 +95,6 @@ public class AdView extends WebView {
     public static final String EXTRA_AD_CLICK_DATA = "com.mopub.intent.extra.AD_CLICK_DATA";
     
     private static final int MINIMUM_REFRESH_TIME_MILLISECONDS = 10000;
-    private static final int HTTP_CLIENT_TIMEOUT_MILLISECONDS = 10000;
     
     private String mAdUnitId;
     // SAY
@@ -96,8 +109,8 @@ public class AdView extends WebView {
     private Location mLocation;
     private boolean mIsLoading;
     private boolean mAutorefreshEnabled;
+    private boolean mTesting;
     private int mRefreshTimeMilliseconds = 60000;
-    private int mTimeoutMilliseconds = HTTP_CLIENT_TIMEOUT_MILLISECONDS;
     private int mWidth;
     private int mHeight;
     private String mAdOrientation;
@@ -205,6 +218,22 @@ public class AdView extends WebView {
                         ". Is this intent unsupported on your phone?");
                 }
                 return true;
+            }
+            // Fast fail if market:// intent is called when Google Play is not installed
+            else if (url.startsWith("market://")) {
+                // Determine which activities can handle the market intent
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                PackageManager packageManager = getContext().getPackageManager();
+                List<ResolveInfo> activities = packageManager.queryIntentActivities(intent, 0);
+                
+                // If there are no relevant activities, don't follow the link
+                boolean isIntentSafe = activities.size() > 0;
+                if (!isIntentSafe) {
+                    Log.w("MoPub", "Could not handle market action: " + url
+                            + ". Perhaps you're running in the emulator, which does not have "
+                            + "the Android Market?");
+                    return true;
+                }
             }
 
             url = urlWithClickTrackingRedirect(adView, url);
@@ -352,15 +381,19 @@ public class AdView extends WebView {
     }
     
     private String generateAdUrl() {
-        StringBuilder sz = new StringBuilder("http://" + MoPubView.HOST + MoPubView.AD_HANDLER);
+        StringBuilder sz = new StringBuilder("http://" + getServerHostname() + 
+                MoPubView.AD_HANDLER);
         sz.append("?v=6&id=" + mAdUnitId);
         sz.append("&nv=" + MoPub.SDK_VERSION);
         
         String udid = Secure.getString(getContext().getContentResolver(), Secure.ANDROID_ID);
         String udidDigest = (udid == null) ? "" : Utils.sha1(udid);
         sz.append("&udid=sha:" + udidDigest);
-
-        if (mKeywords != null) sz.append("&q=" + Uri.encode(mKeywords));
+        
+        String keywords = addKeyword(mKeywords, getFacebookKeyword());
+        if (keywords != null && keywords.length() > 0) {
+            sz.append("&q=" + Uri.encode(keywords));
+        }
         
         if (mLocation != null) {
             sz.append("&ll=" + mLocation.getLatitude() + "," + mLocation.getLongitude());
@@ -400,6 +433,17 @@ public class AdView extends WebView {
         return format.format(new Date());
     }
     
+    private String getFacebookKeyword() {
+        try {
+            Class<?> facebookKeywordProviderClass = Class.forName("com.mopub.mobileads.FacebookKeywordProvider");
+            Method getKeywordMethod = facebookKeywordProviderClass.getMethod("getKeyword", Context.class);
+            
+            return (String) getKeywordMethod.invoke(facebookKeywordProviderClass, getContext());
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+    
     /*
      * Overrides the WebView's loadUrl() in order to expose HTTP response headers.
      */
@@ -415,10 +459,13 @@ public class AdView extends WebView {
             return;
         }
         
+        mFailUrl = null;
         mUrl = url;
         mIsLoading = true;
         
-        mAdFetcher.fetchAdForUrl(mUrl);
+        if (mAdFetcher != null) {
+            mAdFetcher.fetchAdForUrl(mUrl);
+        }
     }
     
     protected void configureAdViewUsingHeadersFromHttpResponse(HttpResponse response) {
@@ -549,15 +596,9 @@ public class AdView extends WebView {
             context.startActivity(intent);
         } catch (ActivityNotFoundException e) {
             String action = intent.getAction();
-            if (action != null && action.startsWith("market://")) {
-                Log.w("MoPub", "Could not handle market action: " + action
-                        + ". Perhaps you're running in the emulator, which does not have "
-                        + "the Android Market?");
-            } else {
-                Log.w("MoPub", "Could not handle intent action: " + action
-                        + ". Perhaps you forgot to declare com.mopub.mobileads.MraidBrowser"
-                        + " in your Android manifest file.");
-            }
+            Log.w("MoPub", "Could not handle intent action: " + action
+                    + ". Perhaps you forgot to declare com.mopub.mobileads.MraidBrowser"
+                    + " in your Android manifest file.");
             
             getContext().startActivity(
                     new Intent(Intent.ACTION_VIEW, Uri.parse("about:blank"))
@@ -629,8 +670,8 @@ public class AdView extends WebView {
     }
     
     protected void loadResponseString(String responseString) {
-        loadDataWithBaseURL("http://"+MoPubView.HOST+"/",
-                responseString,"text/html","utf-8", null);
+        loadDataWithBaseURL("http://" + getServerHostname() + "/", responseString, "text/html",
+                "utf-8", null);
     }
 
     protected void trackImpression() {
@@ -697,6 +738,28 @@ public class AdView extends WebView {
     protected void cancelRefreshTimer() {
         mRefreshHandler.removeCallbacks(mRefreshRunnable);
     }
+    
+    protected int getRefreshTimeMilliseconds() {
+        return mRefreshTimeMilliseconds;
+    }
+    
+    protected void setRefreshTimeMilliseconds(int refreshTimeMilliseconds) {
+        mRefreshTimeMilliseconds = refreshTimeMilliseconds;
+    }
+    
+    private String addKeyword(String keywords, String addition) {
+        if (addition == null || addition.length() == 0) {
+            return keywords;
+        } else if (keywords == null || keywords.length() == 0) {
+            return addition;
+        } else {
+            return keywords + "," + addition;
+        }
+    }
+    
+    protected String getServerHostname() {
+        return mTesting ? MoPubView.HOST_FOR_TESTING : MoPubView.HOST;
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -727,7 +790,9 @@ public class AdView extends WebView {
     }
 
     public void setTimeout(int milliseconds) {
-        mTimeoutMilliseconds = milliseconds;
+        if (mAdFetcher != null) {
+            mAdFetcher.setTimeout(milliseconds);
+        }
     }
 
     public int getAdWidth() {
@@ -777,5 +842,13 @@ public class AdView extends WebView {
     
     public boolean getAutorefreshEnabled() {
         return mAutorefreshEnabled;
+    }
+    
+    public void setTesting(boolean testing) {
+        mTesting = testing;
+    }
+    
+    public boolean getTesting() {
+        return mTesting;
     }
 }

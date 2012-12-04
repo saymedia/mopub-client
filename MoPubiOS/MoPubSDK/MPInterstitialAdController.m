@@ -37,8 +37,12 @@ static NSString * const kOrientationBoth				= @"b";
 - (void)presentNonNativeInterstitialForAdapter:(MPBaseInterstitialAdapter *)adapter
                             fromViewController:(UIViewController *)controller;
 - (id<MPInterstitialAdControllerDelegate>)customEventDelegate;
+- (void)setApplicationStatusBarHidden:(BOOL)hidden;
+- (void)closeInterstitialAnimated:(BOOL)animated;
 
 @end
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 @implementation MPInterstitialAdController
 
@@ -51,6 +55,7 @@ static NSString * const kOrientationBoth				= @"b";
 @synthesize adWantsNativeCloseButton = _adWantsNativeCloseButton;
 @synthesize closeButton = _closeButton;
 @synthesize currentAdapter = _currentAdapter;
+@synthesize testing = _testing;
 @synthesize keywords;
 @synthesize location;
 @synthesize locationEnabled;
@@ -259,7 +264,7 @@ static NSString * const kOrientationBoth				= @"b";
     
     // Track the previous state of the status bar, so that we can restore it.
 	_statusBarWasHidden = [UIApplication sharedApplication].statusBarHidden;
-	[[UIApplication sharedApplication] setStatusBarHidden:YES];
+    [self setApplicationStatusBarHidden:YES];
 	
 	// Likewise, track the previous state of the navigation bar.
 	_navigationBarWasHidden = self.navigationController.navigationBarHidden;
@@ -272,6 +277,15 @@ static NSString * const kOrientationBoth				= @"b";
 
 - (id<MPInterstitialAdControllerDelegate>)customEventDelegate {
     return (self.delegate) ? self.delegate : _parent;
+}
+
+- (void)setApplicationStatusBarHidden:(BOOL)hidden {
+    if ([UIApplication instancesRespondToSelector:@selector(setStatusBarHidden:withAnimation:)]) {
+        UIStatusBarAnimation animation = hidden ? UIStatusBarAnimationFade : UIStatusBarAnimationNone;
+        [[UIApplication sharedApplication] setStatusBarHidden:hidden withAnimation:animation];
+    } else {
+        [[UIApplication sharedApplication] setStatusBarHidden:hidden];
+    }
 }
 
 #pragma mark -
@@ -310,9 +324,17 @@ static NSString * const kOrientationBoth				= @"b";
 	return _adView.locationPrecision;
 }
 
+- (void)setTesting:(BOOL)testing {
+    _adView.testing = testing;
+}
+
+- (BOOL)isTesting {
+    return _adView.testing;
+}
+
 - (void)closeButtonPressed
 {
-	[self adViewShouldClose:_adView];
+	[self closeInterstitialAnimated:YES];
 }
 
 - (void)loadAd
@@ -372,6 +394,87 @@ static NSString * const kOrientationBoth				= @"b";
 	return [_adView locationDescriptionPair];
 }
 
+#pragma mark - Autorotation (general)
+
+- (void)didRotateFromInterfaceOrientation:(UIInterfaceOrientation)fromInterfaceOrientation
+{
+	[super didRotateFromInterfaceOrientation:fromInterfaceOrientation];
+	
+	// Forward the orientation event to the ad view, passing in our current orientation.
+	[_adView rotateToOrientation:self.interfaceOrientation];
+}
+
+#pragma mark - Autorotation (iOS 6.0 and above)
+
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= MP_IOS_6_0
+
+- (BOOL)shouldAutorotate
+{
+    return YES;
+}
+
+- (NSUInteger)supportedInterfaceOrientations
+{
+    NSUInteger applicationSupportedOrientations =
+        [[UIApplication sharedApplication] supportedInterfaceOrientationsForWindow:MPKeyWindow()];
+    NSUInteger interstitialSupportedOrientations = applicationSupportedOrientations;
+    NSString *orientationDescription = @"any";
+    
+    // Using the _orientationType, narrow down the supported interface orientations.
+    
+    if (_orientationType == InterstitialOrientationTypePortrait) {
+        interstitialSupportedOrientations &=
+            (UIInterfaceOrientationMaskPortrait | UIInterfaceOrientationMaskPortraitUpsideDown);
+        orientationDescription = @"portrait";
+    }
+    else if (_orientationType == InterstitialOrientationTypeLandscape) {
+        interstitialSupportedOrientations &= UIInterfaceOrientationMaskLandscape;
+        orientationDescription = @"landscape";
+    }
+    
+    // If the application does not support any of the orientations given by _orientationType,
+    // just return the application's supported orientations.
+    
+    if (!interstitialSupportedOrientations) {
+        MPLogError(@"Your application does not support this interstitial's desired orientation "
+                   @"(%@).", orientationDescription);
+        return applicationSupportedOrientations;
+    }
+    else {
+        return interstitialSupportedOrientations;
+    }
+}
+
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation
+{
+    NSUInteger supportedInterfaceOrientations = [self supportedInterfaceOrientations];
+    UIInterfaceOrientation currentInterfaceOrientation = MPInterfaceOrientation();
+    NSUInteger currentInterfaceOrientationMask = (1 << currentInterfaceOrientation);
+    
+    // First, try to display the interstitial using the current interface orientation. If the
+    // current interface orientation is unsupported, just use any of the supported orientations.
+    
+    if (supportedInterfaceOrientations & currentInterfaceOrientationMask) {
+        return currentInterfaceOrientation;
+    }
+    else if (supportedInterfaceOrientations & UIInterfaceOrientationMaskPortrait) {
+        return UIInterfaceOrientationPortrait;
+    }
+    else if (supportedInterfaceOrientations & UIInterfaceOrientationMaskPortraitUpsideDown) {
+        return UIInterfaceOrientationPortraitUpsideDown;
+    }
+    else if (supportedInterfaceOrientations & UIInterfaceOrientationMaskLandscapeLeft) {
+        return UIInterfaceOrientationLandscapeLeft;
+    }
+    else {
+        return UIInterfaceOrientationLandscapeRight;
+    }
+}
+
+#endif
+
+#pragma mark - Autorotation (before iOS 6.0)
+
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation 
 {
 	if (_orientationType == InterstitialOrientationTypePortrait)
@@ -381,13 +484,6 @@ static NSString * const kOrientationBoth				= @"b";
 		return (interfaceOrientation == UIInterfaceOrientationLandscapeLeft || 
 				interfaceOrientation == UIInterfaceOrientationLandscapeRight);
 	else return YES;
-}
-
-- (void)didRotateFromInterfaceOrientation:(UIInterfaceOrientation)fromInterfaceOrientation {
-	[super didRotateFromInterfaceOrientation:fromInterfaceOrientation];
-	
-	// Forward the orientation event to the ad view, passing in our current orientation.
-	[_adView rotateToOrientation:self.interfaceOrientation];
 }
 
 #pragma mark -
@@ -454,6 +550,8 @@ static NSString * const kOrientationBoth				= @"b";
 
 	if (!adapterType || [adapterType isEqualToString:@""] || 
 		[adapterType isEqualToString:@"html"]) {
+        [self.currentAdapter unregisterDelegate];
+        self.currentAdapter = nil;
 		return;
 	}
 
@@ -475,14 +573,19 @@ static NSString * const kOrientationBoth				= @"b";
 
 - (void)adViewShouldClose:(MPAdView *)view
 {
-	// Restore previous status/navigation bar state.
-	[[UIApplication sharedApplication] setStatusBarHidden:_statusBarWasHidden];
-	[self.navigationController setNavigationBarHidden:_navigationBarWasHidden animated:NO];
+	[self closeInterstitialAnimated:NO];
+}
+
+- (void)closeInterstitialAnimated:(BOOL)animated
+{
+    // Restore previous status/navigation bar state.
+    [self setApplicationStatusBarHidden:_statusBarWasHidden];
+	[self.navigationController setNavigationBarHidden:_navigationBarWasHidden animated:YES];
 	
 	[self interstitialWillDisappearForAdapter:nil];
     
     if (self.rootViewController) {
-        [self.rootViewController dismissModalViewControllerAnimated:NO];
+        [self.rootViewController dismissModalViewControllerAnimated:animated];
         
         // Reset the rootViewController reference to avoid accidentally presenting this
         // interstitial from the wrong view controller.
@@ -598,6 +701,11 @@ static NSString * const kOrientationBoth				= @"b";
 - (void)interstitialDidExpireForAdapter:(MPBaseInterstitialAdapter *)adapter
 {
     _ready = NO;
+    
+    [adapter unregisterDelegate];
+    if (self.currentAdapter == adapter) {
+        self.currentAdapter = nil;
+    }
     
     if ([self.delegate respondsToSelector:@selector(interstitialDidExpire:)]) {
         [self.delegate interstitialDidExpire:self];
